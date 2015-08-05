@@ -19,6 +19,12 @@ class Js_Loader_Admin {
 
 		add_action( 'admin_menu', array( $this, 'plugin_menu' ) );
 		add_action( 'admin_init', array( $this, 'page_init' ) );
+
+		add_action( 'update_option_jsloader_option', array( $this, 'jsloader_option_save_callback' ), 10, 2 );
+	}
+
+	function jsloader_option_save_callback( $old_value, $new_value ){
+	    // var_dump($new_value);exit;
 	}
 
 	/**
@@ -28,17 +34,19 @@ class Js_Loader_Admin {
 		global $wp_scripts;
 		$screen = get_current_screen();
 
-		wp_enqueue_style( 'js_loader_admin_styles', plugins_url( 'assets/css/admin.css', __FILE__ ) );
+		wp_enqueue_style( 'js_loader_admin_styles', 
+			plugins_url( 'assets/css/admin.css', __FILE__ ) );
 	}
 
 	/**
-	 * Enqueue styles
+	 * Enqueue scripts
 	 */
 	public function admin_scripts() {
 		global $wp_scripts;
 		$screen = get_current_screen();
 
-		wp_enqueue_script( 'js_loader_admin_scripts', plugins_url( 'assets/js/admin.js', __FILE__ ) );
+		wp_enqueue_script( 'js_loader_admin_scripts', 
+			plugins_url( 'assets/js/admin.js', __FILE__ ) );
 	}
 
 	public function plugin_menu(){
@@ -52,10 +60,10 @@ class Js_Loader_Admin {
 	}
 
 	public function plugin_page(){ ?>
-		<div class="wrap">
-			<h2><?php esc_html_e( 'JS Loader Settings', 'js_loader' ); ?></h2>
+		<div class="wrap jsl-wrapper">
 			<form method="post" action="options.php">
 	    		<?php
+	    			self::plugin_filter();
 	                // This prints out all hidden setting fields
 	                settings_fields( 'jsloader_option-group' );   
 	                do_settings_sections( 'js_loader_settings' );
@@ -67,6 +75,17 @@ class Js_Loader_Admin {
 	<?php
 	}
 
+	public function plugin_filter() {
+		echo 
+			'<button id="activated_plugin" class="button button-primary">
+				Show Activated Plugin
+			</button>'
+		;
+		echo '<input id="plugin_filter" type="text" 
+				placeholder="Filter Plugin Name">'
+		;
+	}
+
 	public function page_init(){
 		register_setting(
             'jsloader_option-group', // Option group
@@ -76,18 +95,48 @@ class Js_Loader_Admin {
 
 		add_settings_section( 
 			'jsloader_settings_section', 
-			esc_html__( 'My Custom Settings', 'js_loader' ), 
+			esc_html__( 'JS Loader Settings', 'js_loader' ), 
 			'__return_false', 
 			'js_loader_settings'  //Page slug
 		);
 
-		foreach ( Js_Loader::get_libraries() as $key => $library ) {
+		$show_files = 0;
+
+		foreach ( Js_Loader::get_remote_libraries() as $key => $library ) {
+			$details = '<h4>' . $library['name'] . '</h4>';
+			$details .= '<div class="details">';
+			foreach ($library as $detail_name => $detail_value) {
+				if ( is_array($detail_value) || $detail_name == '$loki' || $detail_value == '') {
+					continue;
+				} elseif ($detail_name == 'homepage' || $detail_name == 'github') {
+					$details .= '<div class="detail_name">' . $detail_name . '</div>';
+					$details .= '<div class="detail_value"><a href="' . $detail_value . '" target="_blank">' . $detail_value . '</a></div>';					
+				}else {
+					$details .= '<div class="detail_name">' . $detail_name . '</div>';
+					$details .= '<div class="detail_value">' . $detail_value . '</div>';
+				}
+			}
+			if ($show_files){
+				if (is_array($library['assets'][0]['files'])){
+					foreach ($library['assets'][0]['files'] as $fileindex => $url) {
+							$details .= '<div class="detail_name">file ' . ($fileindex + 1) . '</div>';
+							$details .= '<div class="detail_value">' . $url . '</div>';
+					}
+				}
+			}
+			$details .= $library['files'];
+			$details .= '</div>';
 			add_settings_field(
-	            'jsloader_' . $key, // ID
-	            '<h2>' . $library[ 'name' ] . '</h2>' . '<br><em>' . $library[ 'description'] . '</em>', // Description, // Title
-	            array( $this, 'field_callback' ), // Callback
-	            'js_loader_settings', //Page slug
-	            'jsloader_settings_section', // Section
+	            'jsloader_' . $key,
+				
+				$details, 
+	          
+	            array( $this, 'field_callback' ), 
+	            
+	            'js_loader_settings',
+	           
+	            'jsloader_settings_section',
+	           
 	            $key
 	        );
 		}
@@ -115,11 +164,18 @@ class Js_Loader_Admin {
         
         $option = get_option( 'jsloader_option', array() );
         $checked = isset( $option[$field] )? $option[$field] : 0;
-        
 		printf(
             "<fieldset>
-				<label title='enable'><input type='radio' name='jsloader_option[$field]' value='1' ".checked( $checked, 1, false ).">Enable</label>
-				<label title='disable'><input type='radio' name='jsloader_option[$field]' value='0' ".checked( $checked, 0, false ).">Disable</label>
+				<label title='enable'>
+					<input type='radio' name='jsloader_option[$field]' value='1' 
+						" . checked( $checked, 1, false ) .">
+					Enqueue
+				</label>
+				<label title='disable'>
+					<input type='radio' name='jsloader_option[$field]' value='0'
+						" . checked( $checked, 0, false ) .">
+					Dequeue
+				</label>
             </fieldset>"
         );
     }
